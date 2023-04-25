@@ -1,24 +1,55 @@
-# list all services (containers)
+version: '3'
+
+secrets:
+  db_password:
+    file: db_password.txt
+
+networks:
+  frontend:
+  backend:
+
 services:
-  # name of service(container) to create
   productservice:
-    # indicate path to Dockerfile
     build: product-service
-  # add reverse-proxy server
+    volumes:
+      - "./config:/config"
+      - "./product-service/src:/code"
+    secrets:
+      - db_password
+    networks:
+      - frontend
+      - backend
+    ports:
+      - "5678:5678"
+    environment:
+      - DEBUG=True
+    depends_on:
+      - db
+
   web:
-    # from Dockerfile in nginx folder
     build: nginx
     ports:
       - "80:80"
+    networks:
+      - frontend
+    depends_on:
+      - productservice
 
   db:
-    # here directly pick image from official
     image: mysql
-    # run SQL query from init.sql inside /data/application/ to create db and use native password to connect
     command: "--init-file /data/application/init.sql --default-authentication-plugin=mysql_native_password"
     volumes:
-      # mount init.sql from db/  to  /data/application/
       - "./db/init.sql:/data/application/init.sql"
+      - "db-volume:/var/lib/mysql"
     environment:
-      # 'password' as the root password value
       - MYSQL_ROOT_PASSWORD=password
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$password"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  db-volume:
